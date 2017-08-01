@@ -1,23 +1,24 @@
 package main
 
 import (
-	"net/http"
 	"database/sql"
+	"net/http"
+
 	_ "github.com/mattn/go-sqlite3"
 
 	"encoding/json"
-	"net/url"
-	"io/ioutil"
 	"encoding/xml"
+	"io/ioutil"
+	"net/url"
 
 	"github.com/codegangsta/negroni"
 	"github.com/yosssi/ace"
 )
 
 type Book struct {
-	PK int
-	Title string
-	Author string
+	PK             int
+	Title          string
+	Author         string
 	Classification string
 }
 
@@ -26,10 +27,10 @@ type Page struct {
 }
 
 type SearchResult struct {
-	Title string `xml:"title,attr"`
+	Title  string `xml:"title,attr"`
 	Author string `xml:"author,attr"`
-	Year string `xml:"hyr,attr"`
-	ID string `xml:"owi,attr"`
+	Year   string `xml:"hyr,attr"`
+	ID     string `xml:"owi,attr"`
 }
 
 var db *sql.DB
@@ -78,7 +79,7 @@ func main() {
 		}
 	})
 
-	mux.HandleFunc("/books/add", func (w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/books/add", func(w http.ResponseWriter, r *http.Request) {
 		var book ClassifyBookResponse
 		var err error
 
@@ -87,22 +88,30 @@ func main() {
 		}
 
 		result, err := db.Exec("insert into books (pk, title, author, id, classification) values (?, ?, ?, ?, ?)",
-											nil, book.BookData.Title, book.BookData.Author, book.BookData.ID,
-											book.Classification.MostPopular)
+			nil, book.BookData.Title, book.BookData.Author, book.BookData.ID,
+			book.Classification.MostPopular)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 
 		pk, _ := result.LastInsertId()
 		b := Book{
-			PK: int(pk),
-			Title: book.BookData.Title,
-			Author: book.BookData.Author,
+			PK:             int(pk),
+			Title:          book.BookData.Title,
+			Author:         book.BookData.Author,
 			Classification: book.Classification.MostPopular,
 		}
 		if err := json.NewEncoder(w).Encode(b); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
+	})
+
+	mux.HandleFunc("/books/delete", func(w http.ResponseWriter, r *http.Request) {
+		if _, err := db.Exec("delete from books where pk = ?", r.FormValue("pk")); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
 	})
 
 	n := negroni.Classic()
@@ -117,18 +126,19 @@ type ClassifySearchResponse struct {
 
 type ClassifyBookResponse struct {
 	BookData struct {
-		Title string `xml:"title,attr"`
+		Title  string `xml:"title,attr"`
 		Author string `xml:"author,attr"`
-		ID string `xml:"owi,attr"`
+		ID     string `xml:"owi,attr"`
 	} `xml:"work"`
 	Classification struct {
 		MostPopular string `xml:"sfa,attr"`
 	} `xml:"recommendations>ddc>mostPopular"`
-	}
+}
 
 func find(id string) (ClassifyBookResponse, error) {
 	var c ClassifyBookResponse
-	body, err := classifyAPI("http://classify.oclc.org/classify2/Classify?summary=true&owi=" + url.QueryEscape(id))
+	body, err := classifyAPI("http://classify.oclc.org/classify2/Classify?summary=true&owi=" +
+		url.QueryEscape(id))
 
 	if err != nil {
 		return ClassifyBookResponse{}, err
